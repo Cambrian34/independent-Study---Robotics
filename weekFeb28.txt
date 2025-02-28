@@ -1,0 +1,20 @@
+Report
+Name: Alistair Chambers
+Date: February 28, 2025
+
+This week I worked on the following tasks:
+1. I used cv2 in pi_cam/tp2_v3.py to apply grayscale conversion and edge detection (using OpenCV). Gaussian blur to reduce image noise.
+2. I also tested some visual slam techniques using OpenCV and Python. In pi_cam/visaulslamv2.py 
+I implemented a feature-based visual SLAM algorithm using ORB (Oriented FAST and Rotated BRIEF) features and the Brute-Force Matcher in OpenCV.
+3. Currently working on  Fetch real-time LiDAR data and control movement of the robot. File:lidar/t_lidar_v1.py
+
+Next week I plan to:
+1. Continue working on the LiDAR integration and movement control.
+2. Implement a path planning algorithm for the robot.
+3. Try combining LiDAR data with visual SLAM for better localization and mapping.
+4. Try a adding a mapping feature to the visual SLAM algorithm. 
+
+Challenges faced:
+1. Understanding the intricacies of visual SLAM algorithms and tuning parameters for optimal performance.
+2. Balancing the computational load of processing LiDAR and camera data simultaneously.
+
