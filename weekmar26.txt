@@ -1,0 +1,4 @@
+-Created a movement class with a queue to manage the movemeent request from fusion of lidar and pi cam. 
+    Solves race conditions, untested. Might need some tweeking due to timiings of the underlying serial communication class
+-made the lidar and pi cam files into classes
+-parrallel processing 
