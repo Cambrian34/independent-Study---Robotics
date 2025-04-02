@@ -22,12 +22,7 @@ import mediapipe as mp
 
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
-from basic_cmd_lib import RobotLib
 
-#port = "/dev/ttyUSB0"
-#baudrate = 9600
-
-#instance = RobotLib(port, baudrate)
 
 # Global variables to calculate FPS
 COUNTER, FPS = 0, 0
@@ -77,31 +72,29 @@ def run(model: str, max_results: int, score_threshold: float, camera_id: int,
   def dealWithResult(resultname):
     if resultname == "red":
       print("red")
-      # instance.stopMotor()
+      #Pause the robot for 3 seconds
     elif resultname == "green":
       print("green")
-      # instance.moveForward(power=15)
+      # Green light, keep going
     elif resultname == "stop":
       print("stop")
-      # instance.stopMotor()
-      time.sleep(3)
-      # instance.moveForward(power=15)
-      time.sleep(4)
+      # Stop the robot , until a green light is detected
+      
     elif resultname == "yield":
       print("yield")
-      # instance.moveForward(power=5)
+      # move forward at a slower speed
     elif resultname == "speed55":
       print("speed 55")
-      # instance.moveForward(power=25)
+      # move forward at a faster speed, unspecific as to how much faster as yet
     elif resultname == "speed35":
         print("speed 35")
-        # instance.moveForward(power=15) #make sure we adjust the speed to go slower in the function if we send off 35
+        # move forward at a slower speed, unspecific as to how much slower as yet
     elif resultname == "pedestrian":
         print("pedestrian")
-        # instance.stopMotor()
+        #Stop the robot until the pedestrian has "crossed" the road
     elif resultname == "right":
         print("right")
-        # instance.turnRight()
+        # Turn right at the next "intersection"
   ########## deal with the inference result end   #################
 
   def save_result(result: vision.ImageClassifierResult, unused_output_image: mp.Image, timestamp_ms: int): # type: ignore

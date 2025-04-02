@@ -1,0 +1,4 @@
+-Converted the queue in the movement class to a priority queue
+-Added a thread for each major class
+-addded a contingency so that if the robot is backing up that the classification doesnt stop it
+-removed cpu intensive task, classification view for the pi cam
