@@ -23,10 +23,18 @@ import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 
+from mySerCommLibrary import SerialComm 
+
+
 
 # Global variables to calculate FPS
 COUNTER, FPS = 0, 0
 START_TIME = time.time()
+
+
+# Initialize Serial Communication for movement
+robot = SerialComm()
+robot.initSerComm()
 
 
 def run(model: str, max_results: int, score_threshold: float, camera_id: int,
@@ -72,29 +80,42 @@ def run(model: str, max_results: int, score_threshold: float, camera_id: int,
   def dealWithResult(resultname):
     if resultname == "red":
       print("red")
-      #Pause the robot for 3 seconds
+      # Red light, stop the robot until the light turns green or move after 5secs?
+      robot.stop_robot()
     elif resultname == "green":
       print("green")
-      # Green light, keep going
+      # Green light, keep going/start moving
+      robot.moveForward(15)
+
     elif resultname == "stop":
       print("stop")
       # Stop the robot , until a green light is detected
-      
+      robot.stop_robot()
+
     elif resultname == "yield":
       print("yield")
       # move forward at a slower speed
+      robot.moveForward(10)
+
     elif resultname == "speed55":
       print("speed 55")
       # move forward at a faster speed, unspecific as to how much faster as yet
+      robot.moveForward(25)
+
+
     elif resultname == "speed35":
         print("speed 35")
         # move forward at a slower speed, unspecific as to how much slower as yet
+        robot.moveForward(20)
     elif resultname == "pedestrian":
         print("pedestrian")
         #Stop the robot until the pedestrian has "crossed" the road
+        robot.stop_robot()
     elif resultname == "right":
         print("right")
-        # Turn right at the next "intersection"
+        # Turn right at the next "intersection"?
+
+
   ########## deal with the inference result end   #################
 
   def save_result(result: vision.ImageClassifierResult, unused_output_image: mp.Image, timestamp_ms: int): # type: ignore
@@ -197,6 +218,7 @@ def main():
       required=False,
       type=float,
       default=0.0)
+  
   # Finding the camera ID can be very reliant on platform-dependent methods. 
   # One common approach is to use the fact that camera IDs are usually indexed sequentially by the OS, starting from 0. 
   # Here, we use OpenCV and create a VideoCapture object for each potential ID with 'cap = cv2.VideoCapture(i)'.
@@ -220,4 +242,9 @@ def main():
 
 
 if __name__ == '__main__':
-  main()
+  try:
+    main()
+  except KeyboardInterrupt:
+    print("Keyboard interrupt received. Stopping the robot.")
+    robot.stop_robot()
+    sys.exit(0)

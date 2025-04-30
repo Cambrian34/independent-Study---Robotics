@@ -4,6 +4,8 @@ import math
 import time
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+
 
 from mySerCommLibrary import SerialComm  # Importing the movement class
 
@@ -25,6 +27,15 @@ plt.ion()  # Enable interactive mode for real-time plotting
 robot = SerialComm()
 robot.initSerComm()  # Start handshaking with Arduino
 
+
+#lidar data 
+lidar_data = {}
+
+def visualize_lidar(data):
+    """Stores LiDAR data for the animation function."""
+    global lidar_data
+    lidar_data = data  # Store the latest LiDAR data
+
 def pid_control(error):
     """PID Controller to adjust robot movement"""
     global integral, previous_error
@@ -36,17 +47,46 @@ def pid_control(error):
 
 # Visualization function for LiDAR data
 def visualize_lidar(data):
-    """Visualize LiDAR scan data in polar coordinates."""
-    #angles = np.linspace(0, 360, len(data), endpoint=False)  # Angle range from 0 to 360
-    #distances = np.array(data)  # LiDAR distances
-    angles = np.array(list(data.keys()))
-    distances = np.array(list(data.values()))
+    x = []
+    y = []
+    for angle, distance in data.items():
+        if distance > 100:  # Filter out very small distances (noise)
+            rad = math.radians(angle)
+            x.append(distance * math.cos(rad))
+            y.append(distance * math.sin(rad))
     
     plt.clf()
-    plt.polar(np.deg2rad(angles), distances)
+    plt.scatter(x, y, c='r', s=8)
+    plt.xlim(-9000, 9000)
+    plt.ylim(-9000, 9000)
     plt.title("Real-Time LiDAR Scan")
     plt.draw()
     plt.pause(0.1)
+
+import matplotlib.animation as animation
+
+fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
+
+def update(frame):
+    """Updates the LiDAR visualization in the main thread."""
+    global lidar_data
+    ax.clear()
+    
+    x = []
+    y = []
+    for angle, distance in lidar_data.items():
+        if distance > 100:  # Remove noise
+            rad = math.radians(angle)
+            x.append(distance * math.cos(rad))
+            y.append(distance * math.sin(rad))
+    
+    ax.scatter(x, y, c='r', s=8)
+    ax.set_xlim(-9000, 9000)
+    ax.set_ylim(-9000, 9000)
+    ax.set_title("Real-Time LiDAR Scan")
+
+ani = animation.FuncAnimation(fig, update, interval=100)
+
 
 def lidar_navigation():
     if obj.Connect():
@@ -61,13 +101,10 @@ def lidar_navigation():
                 front_distance_lidar = data.get(0, 3000) / 10  # LiDAR at 0° (front) in cm
                 right_distance = data.get(90, 3000) / 10  # LiDAR at 90° (right wall) in cm
 
-                # Get Ultrasonic front distance
-                front_distance_ultrasonic = robot.readSonicCM(1)  # Assuming port 1
-
                 # Merge sensor readings for better accuracy
-                front_distance = min(front_distance_lidar, front_distance_ultrasonic)
+                front_distance = front_distance_lidar
 
-                print(f"LiDAR Front: {front_distance_lidar:.1f} cm | Ultrasonic Front: {front_distance_ultrasonic} cm | Final Front Distance: {front_distance:.1f} cm | Right: {right_distance:.1f} cm")
+                print(f"LiDAR Front: {front_distance_lidar:.1f} cm | Final Front Distance: {front_distance:.1f} cm | Right: {right_distance:.1f} cm")
 
                 # Compute error for PID wall-following
                 error = setpoint / 10 - right_distance  # Convert setpoint to cm
@@ -76,7 +113,7 @@ def lidar_navigation():
                 # Obstacle Avoidance with Both Sensors
                 if front_distance < 30:  # If an obstacle is within 30cm
                     print("Obstacle detected! Stopping...")
-                    robot.stopMoving()
+                    # robot.stop_robot()
                     time.sleep(0.2)
 
                     # Check left, right, and back clearances to decide which way to turn
@@ -91,36 +128,38 @@ def lidar_navigation():
                     # Decide where to turn based on available space
                     if left_clearance > right_clearance:
                         print("Turning Left...")
-                        robot.turnLeft(15)
+                        # robot.turnLeft(15)
                     elif right_clearance > left_clearance:
                         print("Turning Right...")
-                        robot.turnRight(15)
+                        # robot.turnRight(15)
                     else:  # If both left and right are the same, check back distances
                         if left_back_clearance > right_back_clearance:
                             print("Turning Left (Back) ...")
-                            robot.turnLeft(15)
+                            # robot.turnLeft(15)
                         else:
                             print("Turning Right (Back) ...")
-                            robot.turnRight(15)
+                            # robot.turnRight(15)
 
                     time.sleep(0.5)  # Allow time for turning
-                    robot.stopMoving()
+                    # robot.stop_robot()
 
                 # **Wall Following with PID**
                 elif abs(error) < 5:  # Converted threshold to cm
-                    robot.moveForward(15)
+                    # robot.moveForward(15)
+                    print("Moving Forward")
+                    pass
                 elif error > 0:
-                    robot.turnLeft(15)
+                    # robot.turnLeft(15)
+                    print("Turning Left")
                     time.sleep(0.5)
-                    robot.stopMoving()
+                    # robot.stop_robot()
                 else:
-                    robot.turnRight(15)
+                    print("Turning Right")
+                    # robot.turnRight(15)
                     time.sleep(0.5)
-                    robot.stopMoving()
+                    # robot.stop_robot()
 
                 time.sleep(0.1)  # Small delay for stable control loop
-
-            
 
             except Exception as e:
                 print(f"Error: {e}")

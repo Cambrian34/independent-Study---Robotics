@@ -11,7 +11,7 @@ import logging
 import queue
 import serial 
 
-# --- Configuration ---
+# --- Config ---
 DEFAULT_MODEL_PATH = 'model.tflite'
 DEFAULT_SERIAL_PORT = '/dev/ttyUSB1'
 DEFAULT_LIDAR_PORT = '/dev/ttyUSB0'
@@ -22,7 +22,7 @@ DEFAULT_MAX_RESULTS = 1
 DEFAULT_SCORE_THRESHOLD = 0.9 #could be lower?
 DEFAULT_OBSTACLE_THRESHOLD = 500   #mm
 
-# --- Serial Communication Class ---
+# --- Serial Communication ---
 class SerialComm:
     #some unused methods were pruned for now
     def __init__(self, baudrate=9600, port="/dev/ttyUSB0", timeout=1):
@@ -95,7 +95,7 @@ class SerialComm:
 # --- Logging Setup ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(threadName)s - %(message)s')
 
-# --- MovementController Class ---
+# --- MovementController ---
 class MovementController:
     """
     A class to manage robot movement commands from multiple sources.
@@ -185,7 +185,7 @@ class MovementController:
         #Returns the command currently being processed
         return self.current_command
 
-# --- LidarNavigation Class ---
+# --- LidarNavigation ---
 class LidarNavigation:
     def __init__(self, lidar_port: str, obstacle_threshold: int, movement_controller: MovementController):
         self.lidar_port = lidar_port
@@ -261,8 +261,8 @@ class LidarNavigation:
 
                             # 4. Decide turn direction based on side clearance after backing up
                             # Wider angle checks for turning space
-                            left_clearance = min(data.get(a % 360, 10000) for a in range(60, 121)) # Check 60 to 120 deg
-                            right_clearance = min(data.get(a % 360, 10000) for a in range(240, 301)) # Check 240 to 300 deg (-120 to -60)
+                            left_clearance = data.get(270,10000)
+                            right_clearance = data.get(90, 10000) 
                             logging.info(f"Clearance check after backup: Left={left_clearance:.0f}mm, Right={right_clearance:.0f}mm")
 
                             if left_clearance > right_clearance and left_clearance > self.obstacle_threshold * 1.5:
@@ -281,7 +281,7 @@ class LidarNavigation:
                         if self.movement_controller.get_current_command() is None:
                            logging.debug("Path clear, adding forward command.")
                            if self.movement_controller.get_current_command() != "forward":
-                               self.movement_controller.add_command("forward", priority=1) 
+                               self.movement_controller.add_command("forward", priority=2) 
                     time.sleep(0.1) 
 
                 except StopIteration:
@@ -311,7 +311,7 @@ class LidarNavigation:
                 logging.error(f"Error stopping/disconnecting LiDAR: {e}")
         self.lidar = None
 
-# --- ImageClassifierRobot Class ---
+# --- ImageClassifierRobot ---
 class ImageClassifierRobot:
     def __init__(self, model_path: str, max_results: int, score_threshold: float,
                  camera_id: int, width: int, height: int, movement_controller: MovementController):
@@ -517,31 +517,31 @@ def main():
 
     
     parser.add_argument('--model', type=str,
-                        default=DEFAULT_MODEL_PATH, # Use constant
+                        default=DEFAULT_MODEL_PATH,
                         help='Path to the TFLite image classification model file.')
     parser.add_argument('--serial-port', type=str,
-                        default=DEFAULT_SERIAL_PORT, # Use constant
+                        default=DEFAULT_SERIAL_PORT,
                         help='Serial port for robot motor controller communication.')
     parser.add_argument('--lidar-port', type=str,
-                        default=DEFAULT_LIDAR_PORT, # Use constant
+                        default=DEFAULT_LIDAR_PORT,
                         help='Serial port for the LiDAR sensor.')
     parser.add_argument('--camera-id', type=int,
-                        default=DEFAULT_CAMERA_ID, # Use constant
+                        default=DEFAULT_CAMERA_ID,
                         help='ID of the camera device.')
     parser.add_argument('--frame-width', type=int,
-                        default=DEFAULT_FRAME_WIDTH, # Use constant
+                        default=DEFAULT_FRAME_WIDTH,
                         help='Width of the camera frame for processing.')
     parser.add_argument('--frame-height', type=int,
-                        default=DEFAULT_FRAME_HEIGHT, # Use constant
+                        default=DEFAULT_FRAME_HEIGHT,
                         help='Height of the camera frame for processing.')
     parser.add_argument('--max-results', type=int,
-                        default=DEFAULT_MAX_RESULTS, # Use constant
+                        default=DEFAULT_MAX_RESULTS,
                         help='Maximum classification results from the model.')
     parser.add_argument('--score-threshold', type=float,
-                        default=DEFAULT_SCORE_THRESHOLD, # Use constant
+                        default=DEFAULT_SCORE_THRESHOLD,
                         help='Score threshold for displaying classification results.')
     parser.add_argument('--obstacle-threshold', type=int,
-                        default=DEFAULT_OBSTACLE_THRESHOLD, # Use constant
+                        default=DEFAULT_OBSTACLE_THRESHOLD,
                         help='Obstacle detection distance threshold in mm for LiDAR.')
 
 

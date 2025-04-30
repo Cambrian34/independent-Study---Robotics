@@ -1,0 +1,16 @@
+- After rigirous testing of the priority queue, i have detected a bug of commands being sent too quickly causing 
+    the movement commands to be sent within the ack timeout, causing the robot to be stuck with a higher priority command controlling it 
+
+- ive also moved the camera so that it see higher for seeing signs
+
+- im currently working on refactoring the ARDUINO code to send back a flag when the command is received and executed
+
+- Im now thinking of how to lower the latency between the arduino and the pi for faster command execution
+
+
+Suggestion from professor
+
+separate sensor reading form the main control.
+
+
+

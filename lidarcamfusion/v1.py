@@ -1,119 +1,209 @@
-import cv2
-import numpy as np
-import PyLidar3 as pyLidar3
-import time
-import math
 import threading
+"""
+This script integrates LiDAR-based navigation and camera-based image classification for a robotic system.
+Modules:
+- threading: For running LiDAR navigation and camera classification concurrently.
+- PyLidar3: For interfacing with the YdLidarG4 LiDAR sensor.
+- math, time, numpy, matplotlib.pyplot, cv2: For various mathematical operations, timing, array manipulations, plotting, and computer vision tasks.
+- mediapipe: For image classification using MediaPipe.
+- mySerCommLibrary: For serial communication with the robot.
+Classes:
+- None
+Functions:
+- dealWithResult(resultname): Handles the robot's actions based on the classification result.
+- pid_control(error): Computes the PID control output based on the error.
+- visualize_lidar(data): Visualizes LiDAR data in real-time using a polar plot.
+- lidar_navigation(): Manages LiDAR-based navigation, including real-time scanning and movement control.
+- camera_classification(model, max_results, score_threshold, camera_id, width, height): Manages camera-based image classification using a specified model.
+Usage:
+- The script starts LiDAR navigation and camera classification in separate threads.
+- The robot's movement is controlled based on LiDAR data and image classification results.
+- The script can be stopped using a keyboard interrupt, which safely shuts down the system.
+"""
+import PyLidar3
+import math    
+import time
+import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
+import cv2
+import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
+from mySerCommLibrary import SerialComm  # Importing the movement class
 
-# Initialize Camera
-cap = cv2.VideoCapture(0)  # Change index if needed
+# LiDAR Configuration
+port = "/dev/tty.usbserial-0001"  # Adjust the port as needed
+obj = PyLidar3.YdLidarG4(port)
 
-# Initialize LiDAR
-port = "/dev/ttyUSB0"  # Adjust based on your setup
-lidar = pyLidar3.YdLidarX4(port)
-
-# Frame dimensions (adjust based on camera resolution)
-WIDTH, HEIGHT = 320, 240  # Reduced resolution for faster processing
-CENTER_X, CENTER_Y = WIDTH // 2, HEIGHT // 2
-
-# LiDAR parameters
-LIDAR_MAX_RANGE = 4000  # mm
-SCALE = HEIGHT / (2 * LIDAR_MAX_RANGE)  # Scale LiDAR data to fit frame
-
-# Shared data between threads
-lidar_data = [0 for _ in range(360)]
-x = np.array([0 for _ in range(360)])
-y = np.array([0 for _ in range(360)])
-is_run = True
-
-# PID controller parameters (you can add PID control if needed for the robot)
+# PID controller parameters
 Kp = 1.0
 Ki = 0.0
 Kd = 0.0
-setpoint = 1500  # desired distance from the wall in mm
+setpoint = 1500  # Desired distance from the wall in mm
 integral = 0
 previous_error = 0
 
-# Function to read LiDAR data in a separate thread
-def read_lidar():
-    global lidar_data, x, y, is_run
-    if lidar.Connect():
-        print("LiDAR connected. Starting scan...")
-        gen = lidar.StartScanning()
-        while is_run:
-            lidar_data = next(gen)
-            for angle in range(0, 360):
-                if lidar_data[angle] > 0 and lidar_data[angle] < LIDAR_MAX_RANGE:
-                    x[angle] = lidar_data[angle] * math.cos(math.radians(angle))
-                    y[angle] = lidar_data[angle] * math.sin(math.radians(angle))
-            time.sleep(0.05)  # Reduce reading frequency
-    else:
-        print("LiDAR connection failed.")
+plt.ion()  # Enable interactive mode for real-time plotting
 
-# Function for the animation of LiDAR data in real-time
-def all_realtime_animation():
-    fig, ax = plt.subplots(nrows=1, figsize=(7, 7))
+# Initialize Serial Communication for movement
+robot = SerialComm()
+robot.initSerComm()  # Start handshaking with Arduino
 
-    def animate(i):
-        ax.clear()
-        ax.set_ylim(-9000, 9000)
-        ax.set_xlim(-9000, 9000)
-        ax.scatter(x, y, c='r', s=8)
 
-    ani = animation.FuncAnimation(fig, animate, interval=4)
-    plt.show()
+lock = threading.Lock()
+# Image Classification Setup
+def dealWithResult(resultname):
+    with lock:
+        if resultname == "red":
+            print("Red - Pausing for 3 seconds")
+            robot.stopMoving()
+            time.sleep(3)
+        elif resultname == "green":
+            print("Green - Moving forward")
+            robot.moveForward(15)
+        elif resultname == "stop":
+            print("Stop - Waiting for green light")
+            robot.stopMoving()
+        elif resultname == "yield":
+            print("Yield - Moving slowly")
+            robot.moveForward(5)
+        elif resultname == "speed55":
+            print("Speed 55 - Moving faster")
+            robot.moveForward(25)
+        elif resultname == "speed35":
+            print("Speed 35 - Moving slower")
+            robot.moveForward(10)
+        elif resultname == "pedestrian":
+            print("Pedestrian - Stopping until clear")
+            robot.stopMoving()
+        elif resultname == "right":
+            print("Right - Preparing to turn")
+            robot.turnRight(15)
+            time.sleep(1)
+            robot.moveForward(15)
 
-# Main loop for capturing and processing frames with LiDAR data
-def main_loop():
-    global is_run
+# PID Controller
+def pid_control(error):
+    global integral, previous_error
+    integral += error
+    derivative = error - previous_error
+    output = Kp * error + Ki * integral + Kd * derivative
+    previous_error = error
+    return output 
 
-    # Start LiDAR data reading in a separate thread
-    lidar_thread = threading.Thread(target=read_lidar, daemon=True)
-    lidar_thread.start()
+# LiDAR Visualization
+def visualize_lidar(data):
+    angles = np.array(list(data.keys()))
+    distances = np.array(list(data.values()))
+    plt.clf()
+    plt.polar(np.deg2rad(angles), distances)
+    plt.title("Real-Time LiDAR Scan")
+    plt.draw()
+    plt.pause(0.1)
 
-    try:
+# LiDAR Navigation
+def lidar_navigation():
+    if obj.Connect():
+        print(obj.GetDeviceInfo())
+        gen = obj.StartScanning()
+        
         while True:
-            ret, frame = cap.read()
-            if not ret:
-                print("Camera error")
+            try:
+                data = next(gen)
+                visualize_lidar(data)  # LiDAR visualization
+                
+                front_distance = data[0]  # 0° (front)
+                right_distance = data[90]  # 90° (right side)
+                
+                # Read ultrasonic sensor (Assuming port is 1)
+                ultrasonic_distance = int(robot.readSonicIN(1))
+
+                print(f"Ultrasonic Distance: {ultrasonic_distance} mm")
+                
+                # Collision Avoidance: If an object is too close, stop
+                if ultrasonic_distance < 5:
+                    print("Obstacle detected! Stopping robot.")
+                    robot.stopMoving()
+                    time.sleep(0.5)  # Pause before re-evaluating
+                    continue  # Skip further processing for this loop iteration
+
+                # Compute error (distance from setpoint)
+                error = setpoint - right_distance
+                correction = pid_control(error)
+
+                # Determine movement based on correction
+                if abs(error) < 50:  # If within range, move forward
+                    robot.moveForward(15)
+                elif error > 0:  # Too far, turn left
+                    robot.turnLeft(15)
+                    time.sleep(0.5)
+                    robot.stopMoving()
+                else:  # Too close, turn right
+                    robot.turnRight(15)
+                    time.sleep(0.5)
+                    robot.stopMoving()
+                
+                time.sleep(0.1)  # Small delay for stability
+
+            except Exception as e:
+                print(f"Error: {e}")
                 break
+    else:
+        print("Failed to connect to LiDAR.")
 
-            # Convert frame to grayscale and then back to BGR (to keep it in color)
-            frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            frame = cv2.cvtColor(frame_gray, cv2.COLOR_GRAY2BGR)
 
-            # Overlay LiDAR points on the frame
-            for angle in range(0, 360, 2):  # Skip some angles to reduce load
-                distance = lidar_data[angle]
-                if 0 < distance < LIDAR_MAX_RANGE:
-                    # Convert polar to Cartesian
-                    theta = math.radians(angle)
-                    x_coord = int(CENTER_X + distance * SCALE * math.cos(theta))
-                    y_coord = int(CENTER_Y - distance * SCALE * math.sin(theta))
+# Camera-Based Image Classification
+def camera_classification(model='model.tflite', max_results=1, score_threshold=0.0, camera_id=0, width=224, height=224):
+    cap = cv2.VideoCapture(camera_id)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
 
-                    # Draw LiDAR point on frame
-                    cv2.circle(frame, (x_coord, y_coord), 2, (0, 255, 0), -1)
+    def save_result(result, unused_output_image, timestamp_ms):
+        if result.classifications:
+            category = result.classifications[0].categories[0]
+            dealWithResult(category.category_name)
 
-            # Display the fused result of Camera and LiDAR
-            cv2.imshow("LiDAR + Camera Fusion", frame)
+    base_options = python.BaseOptions(model_asset_path=model)
+    options = vision.ImageClassifierOptions(
+        base_options=base_options,
+        running_mode=vision.RunningMode.LIVE_STREAM,
+        max_results=max_results,
+        score_threshold=score_threshold,
+        result_callback=save_result)
+    classifier = vision.ImageClassifier.create_from_options(options)
 
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                break
-    except KeyboardInterrupt:
-        pass
-    finally:
-        is_run = False
-        cap.release()
-        cv2.destroyAllWindows()
-        lidar.StopScanning()
-        lidar.Disconnect()
+    while cap.isOpened():
+        success, image = cap.read()
+        if not success:
+            break
+        rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
+        classifier.classify_async(mp_image, time.time_ns() // 1_000_000)
+        if cv2.waitKey(1) == 27:
+            break
+    classifier.close()
+    cap.release()
+    cv2.destroyAllWindows()
 
 if __name__ == "__main__":
-    # Start the LiDAR animation in a separate thread
-    animation_thread = threading.Thread(target=all_realtime_animation, daemon=True)
-    animation_thread.start()
+    try:
+        lidar_thread = threading.Thread(target=lidar_navigation, daemon=True)
+        camera_thread = threading.Thread(target=camera_classification, daemon=True)
+        
+        lidar_thread.start()
+        camera_thread.start()
+        
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("\nStopping system...")
+        obj.StopScanning()
+        obj.Disconnect()
+        robot.stopMoving()
+        print("Shutdown complete.")
+        plt.close()
+        cv2.destroyAllWindows()
+        lidar_thread.stop()
+        camera_thread.stop()
+        exit()
 
-    # Run the main loop for capturing frames
-    main_loop()
